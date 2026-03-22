@@ -6,37 +6,65 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-  <div class="app">
-    <h1>Phrase Builder</h1>
+  <!-- Onboarding modal -->
+  <div id="onboardModal" class="modal">
+    <div class="modal-content">
+      <h2>Tell us about you</h2>
 
-    <div class="controls">
-      <div class="word-grid" id="wordGrid">
-        <!-- Buttons inserted by JS -->
-      </div>
-
-      <div class="sentence-area">
-        <div id="sentence" class="sentence">Click words to build a sentence</div>
-        <div class="actions">
-          <button id="clearBtn">Clear</button>
-          <button id="backspaceBtn">Backspace</button>
-        </div>
-      </div>
-
-      <div class="voice-area">
+      <div class="field">
         <label>Gender</label>
-        <div>
-          <label><input type="radio" name="gender" value="female" checked> Female</label>
-          <label><input type="radio" name="gender" value="male"> Male</label>
+        <label><input type="radio" name="on_gender" value="female" checked> Female</label>
+        <label><input type="radio" name="on_gender" value="male"> Male</label>
+      </div>
+
+      <div class="field">
+        <label>Race / Ethnicity</label>
+        <select id="on_race">
+          <option value="indian">Indian</option>
+          <option value="african">African</option>
+          <option value="hispanic">Hispanic</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <button id="on_continue">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main app (hidden until onboarding done) -->
+  <div id="appRoot" style="display:none;">
+    <div class="app">
+      <h1>Phrase Builder</h1>
+      <div class="controls">
+        <div class="word-grid" id="wordGrid"></div>
+
+        <div class="sentence-area">
+          <div id="sentence" class="sentence">Click words to build a sentence</div>
+          <div class="actions">
+            <button id="clearBtn">Clear</button>
+            <button id="backspaceBtn">Backspace</button>
+            <button id="undoBtn">Undo</button>
+          </div>
         </div>
 
-        <label for="voiceSelect">Voice</label>
-        <select id="voiceSelect"></select>
+        <div class="voice-area">
+          <label>Selected Gender</label>
+          <div id="selectedGender"></div>
 
-        <div class="play-actions">
-          <button id="playBtn">Play</button>
+          <label>Selected Race</label>
+          <div id="selectedRace"></div>
+
+          <label for="voiceSelect">Voice</label>
+          <select id="voiceSelect"></select>
+
+          <div class="play-actions">
+            <button id="playBtn">Play</button>
+          </div>
+
+          <div id="status" class="status"></div>
         </div>
-
-        <div id="status" class="status"></div>
       </div>
     </div>
   </div>

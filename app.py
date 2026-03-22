@@ -5,64 +5,124 @@ from flask import Flask, render_template, request, Response, jsonify
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-# Configure the Eigen endpoint and API key via environment
 EIGEN_URL = os.environ.get('EIGEN_URL', 'https://api-web.eigenai.com/api/v1/generate')
-EIGEN_KEY = os.environ.get('EIGEN_API_KEY')  # must be set
-
+EIGEN_KEY = os.environ.get('EIGEN_API_KEY')
 if not EIGEN_KEY:
     raise RuntimeError("Set the EIGEN_API_KEY environment variable before running the app.")
+
+# Server-side mapping: gender -> race -> voice_name -> voice_id
+# Replace the placeholder IDs with the real voice_id strings you have.
+VOICE_MAP = {
+    "female": {
+        "indian": {
+            "Indian_female_1": "d3d661b8d5e640f69b0c05d12112e41d"
+        },
+        "african": {
+            "African_female_1": "AFRICAN_SMOOTH_ID",
+            "African_female_2": "AFRICAN_BRIGHT_ID"
+        },
+        "hispanic": {
+            "Hispanic_rich": "HISPANIC_RICH_ID",
+            "Hispanic_soft": "HISPANIC_SOFT_ID"
+        },
+        "other": {
+            "Neutral_female_1": "NEUTRAL_FEMALE_1_ID"
+        }
+    },
+    "male": {
+        "indian": {
+            "Indian_male_1": "d834344669cf40bfaeac8a21942e6ac8",
+            "Indian_male_2": "8b91f852c1894c9aad1bb5ac55d2d128"
+        },
+        "african": {
+            "African_male_1": "95d73fb20eb745f5adec3e02719b9117",
+            "African_male_2": "46c9ad8090fa4a8bba95568859b48650"
+        },
+        "hispanic": {
+            "Hispanic_deep": "HISPANIC_DEEP_ID"
+        },
+        "other": {
+            "Neutral_male_1": "NEUTRAL_MALE_1_ID"
+        }
+    }
+}
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/voices', methods=['POST'])
+def voices():
+    """
+    Client posts JSON: { gender: "male"|"female", race: "indian"|"african"|"hispanic"|"other" }
+    Server returns the list of voice names available for that selection.
+    """
+    data = request.get_json() or {}
+    gender = data.get('gender')
+    race = data.get('race')
+    if not gender or not race:
+        return jsonify({"error": "gender and race required"}), 400
+    gender_map = VOICE_MAP.get(gender.lower())
+    if not gender_map:
+        return jsonify({"error": "invalid gender"}), 400
+    race_map = gender_map.get(race.lower())
+    if not race_map:
+        return jsonify({"error": "no voices for that race"}), 404
+    # Return list of voice names
+    return jsonify({"voices": list(race_map.keys())})
+
 @app.route('/synthesize', methods=['POST'])
 def synthesize():
     """
-    Expects JSON: { text: "...", voice: "Linda", stream: false }
-    Uses multipart/form-data (files=) to match the working client you provided.
-    Streams the audio bytes back to the browser with content-type audio/wav.
+    Expects JSON: { text: "...", voice_name: "...", stream: false, sampling: {...} }
+    Server maps voice_name -> voice_id using VOICE_MAP and calls Eigen API with voice_id.
     """
     payload = request.get_json() or {}
     text = payload.get('text', '').strip()
-    voice = payload.get('voice', '')
+    voice_name = payload.get('voice_name', '')
     stream_flag = payload.get('stream', False)
     sampling = payload.get('sampling', {"temperature": 0.85, "top_p": 0.95, "top_k": 50})
 
     if not text:
         return jsonify({"error": "No text provided"}), 400
-    if not voice:
+    if not voice_name:
         return jsonify({"error": "No voice selected"}), 400
 
-    headers = {
-        "Authorization": f"Bearer {EIGEN_KEY}"
-    }
+    # Find voice_id in VOICE_MAP
+    voice_id = None
+    for gender_map in VOICE_MAP.values():
+        for race_map in gender_map.values():
+            if voice_name in race_map:
+                voice_id = race_map[voice_name]
+                break
+        if voice_id:
+            break
 
-    # Build multipart/form-data payload using files= to force form encoding
+    if not voice_id:
+        return jsonify({"error": "Unknown voice name"}), 400
+
+    headers = {"Authorization": f"Bearer {EIGEN_KEY}"}
     files = {
         "model": (None, "higgs2p5"),
         "text": (None, text),
-        "voice": (None, voice),
+        # Use voice_id field per your REST example
+        "voice_id": (None, voice_id),
         "stream": (None, "true" if stream_flag else "false"),
         "sampling": (None, json.dumps(sampling)),
     }
 
     try:
-        # Stream=True so we can forward bytes as they arrive
         resp = requests.post(EIGEN_URL, headers=headers, files=files, stream=True, timeout=120)
     except requests.RequestException as e:
         return jsonify({"error": f"Request to Eigen failed: {str(e)}"}), 502
 
-    # If the remote returned an error, capture and forward the message
     if resp.status_code >= 400:
-        # Try to read text body for diagnostics
         try:
             err_text = resp.text
         except Exception:
             err_text = f"Status {resp.status_code}"
         return jsonify({"error": "Eigen API error", "details": err_text}), resp.status_code
 
-    # Forward the audio stream to the browser
     def generate():
         try:
             for chunk in resp.iter_content(chunk_size=4096):
@@ -71,7 +131,6 @@ def synthesize():
         finally:
             resp.close()
 
-    # The Eigen endpoint returns WAV bytes in your tests; set audio/wav
     return Response(generate(), content_type='audio/wav')
 
 if __name__ == '__main__':
